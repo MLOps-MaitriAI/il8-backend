@@ -1,4 +1,4 @@
-name: Merge Staging to Production (FastAPI Backend, Excluding .github)
+name: Merge Staging to Production (Excluding .github)
 
 on:
   push:
@@ -11,23 +11,23 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-
+      
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.12'
-
+      
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
+      
       - name: Run tests
         run: |
-          # Replace with actual test command for FastAPI backend, for example:
+          # Add your test command here, for example:
           # python -m pytest tests/
-          echo "Running tests... (Add your test command here)"
-
+          echo "Running tests... (Add your test command)"
+      
   create_pull_request:
     needs: test_and_build_backend
     runs-on: ubuntu-latest
@@ -42,17 +42,21 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
           git checkout -b temp-staging-branch staging
-          git rm -r --cached .github
-          git add .
-          git commit -m "Remove .github folder for merging"
-
+          if [ -d ".github" ]; then
+            git rm -r --cached .github
+            git add .
+            git commit -m "Remove .github folder for merging" || echo "No changes to commit"
+          else
+            echo ".github folder not found, skipping removal."
+          fi
+      
       - name: Create Pull Request
         env:
-          GH_TOKEN: ${{ secrets.IL8_CI_CD }}
+          GITHUB_TOKEN: ${{ secrets.IL8_CI_CD }}
         run: |
-          pr_url=$(gh pr create --base production --head temp-staging-branch --title "Merge Staging to Production (FastAPI Backend, Excluding .github)" --body "This PR merges the latest changes from the staging branch into the production branch for the FastAPI backend, excluding the .github folder. Please review and approve to proceed with the merge.")
+          pr_url=$(gh pr create --base production --head temp-staging-branch --title "Merge Staging to Production (Excluding .github)" --body "This PR merges the latest changes from the staging branch into the production branch, excluding the .github folder. Please review and approve to proceed with the merge.")
           echo "PR_URL=$pr_url" >> $GITHUB_ENV
-
+      
       - name: Output PR URL
         run: echo "Pull request created - ${{ env.PR_URL }}"
 
@@ -62,23 +66,44 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-
+      
       - name: Wait for PR Approval
         id: approval
         uses: trstringer/manual-approval@v1
         with:
           secret: ${{ secrets.IL8_CI_CD }}
           approvers: MLOps-MaitriAI
-
+      
       - name: Merge Pull Request
         if: steps.approval.outputs.approved == 'true'
         env:
-          GH_TOKEN: ${{ secrets.IL8_CI_CD }}
+          GITHUB_TOKEN: ${{ secrets.IL8_CI_CD }}
         run: |
           pr_number=$(echo ${{ env.PR_URL }} | awk -F'/' '{print $NF}')
           gh pr merge $pr_number --merge
-
+      
       - name: Cleanup temporary branch
         if: steps.approval.outputs.approved == 'true'
         run: |
           git push origin --delete temp-staging-branch
+
+  deploy_to_production:
+    needs: merge_pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout production code
+        uses: actions/checkout@v2
+        with:
+          ref: production
+      
+      - name: Deploy to production server
+        env:
+          SERVER_SSH_KEY: ${{ secrets.PRODUCTION_SERVER_SSH_KEY }}
+          SERVER_USER: ${{ secrets.PRODUCTION_SERVER_USER }}
+          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER_HOST }}
+        run: |
+          echo "$SERVER_SSH_KEY" > deploy_key
+          chmod 600 deploy_key
+          scp -i deploy_key -r api auth db main1.py main.py requirements.txt static wait_for_db.py $SERVER_USER@$SERVER_HOST:/path/to/production/directory
+          ssh -i deploy_key $SERVER_USER@$SERVER_HOST "cd /path/to/production/directory && pip install -r requirements.txt && systemctl restart your-fastapi-service"
+          rm -f deploy_key
