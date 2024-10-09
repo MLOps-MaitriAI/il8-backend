@@ -44,7 +44,7 @@ from db.session import engine
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="Your API Title",
+    title="title",
     openapi_url=None,  
     docs_url=None,  
     redoc_url=None,
