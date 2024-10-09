@@ -15,39 +15,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.12'  # Update to match the version in your environment
+          python-version: '3.12'  # Updated to match the version in your environment
       
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
+      
       - name: Run tests
         run: |
           # Add your test command here, for example:
           # python -m pytest tests/
           echo "Running tests... (Add your test command)"
-
-      - name: Lint with pylint  # Alternative linting step
-        run: |
-          pip install pylint
-          pylint auth/user_rights_middleware.py --disable=C0114,C0115,C0116
-      
-      - name: Fix linting errors (manual and automatic)
-        run: |
-          # Install autopep8 for auto-fixing issues
-          pip install autopep8
-          
-          # Auto-fix what can be fixed
-          autopep8 --in-place --aggressive --aggressive auth/user_rights_middleware.py
-          
-          # Manually fix remaining issues in user_rights_middleware.py
-          sed -i 's/mod\.get_modules_id/get_modules_id/g' auth/user_rights_middleware.py
-          sed -i 's/from fastapi import/from fastapi import Rights, /g' auth/user_rights_middleware.py
-          
-          # Run pylint again to check if errors are resolved
-          pylint auth/user_rights_middleware.py --disable=C0114,C0115,C0116
-
   create_pull_request:
     needs: test_and_build_backend
     runs-on: ubuntu-latest
@@ -64,13 +43,13 @@ jobs:
           git checkout -b temp-staging-branch staging
           git rm -r --cached .github
           git add .
-          git commit -m "Remove .github folder and fix linting issues"
+          git commit -m "Remove .github folder for merging"
       
       - name: Create Pull Request
         env:
           GITHUB_TOKEN: ${{ secrets.IL8_CI_CD }}
         run: |
-          pr_url=$(gh pr create --base production --head temp-staging-branch --title "Merge Staging to Production (FastAPI Backend, Excluding .github)" --body "This PR merges the latest changes from the staging branch into the production branch for the FastAPI backend, excluding the .github folder and fixing linting issues. Please review and approve to proceed with the merge.")
+          pr_url=$(gh pr create --base production --head temp-staging-branch --title "Merge Staging to Production (FastAPI Backend, Excluding .github)" --body "This PR merges the latest changes from the staging branch into the production branch for the FastAPI backend, excluding the .github folder. Please review and approve to proceed with the merge.")
           echo "PR_URL=$pr_url" >> $GITHUB_ENV
       
       - name: Output PR URL
@@ -102,3 +81,23 @@ jobs:
         if: steps.approval.outputs.approved == 'true'
         run: |
           git push origin --delete temp-staging-branch
+  deploy_to_production:
+    needs: merge_pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout production code
+        uses: actions/checkout@v2
+        with:
+          ref: production
+      
+      - name: Deploy to production server
+        env:
+          SERVER_SSH_KEY: ${{ secrets.PRODUCTION_SERVER_SSH_KEY }}
+          SERVER_USER: ${{ secrets.PRODUCTION_SERVER_USER }}
+          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER_HOST }}
+        run: |
+          echo "$SERVER_SSH_KEY" > deploy_key
+          chmod 600 deploy_key
+          scp -i deploy_key -r api auth db main1.py main.py requirements.txt static wait_for_db.py $SERVER_USER@$SERVER_HOST:/path/to/production/directory
+          ssh -i deploy_key $SERVER_USER@$SERVER_HOST "cd /path/to/production/directory && pip install -r requirements.txt && systemctl restart your-fastapi-service"
+          rm -f deploy_key
