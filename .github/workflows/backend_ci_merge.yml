@@ -27,6 +27,7 @@ jobs:
           # Add your test command here, for example:
           # python -m pytest tests/
           echo "Running tests... (Add your test command)"
+      
   create_pull_request:
     needs: test_and_build_backend
     runs-on: ubuntu-latest
@@ -43,7 +44,13 @@ jobs:
           git checkout -b temp-staging-branch staging
           git rm -r --cached .github
           git add .
-          git commit -m "Remove .github folder for merging"
+          
+          # Check if there are any changes to commit
+          if git diff-index --quiet HEAD; then
+            echo "No changes to commit."
+          else
+            git commit -m "Remove .github folder for merging"
+          fi
       
       - name: Create Pull Request
         env:
@@ -81,6 +88,7 @@ jobs:
         if: steps.approval.outputs.approved == 'true'
         run: |
           git push origin --delete temp-staging-branch
+
   deploy_to_production:
     needs: merge_pull_request
     runs-on: ubuntu-latest
