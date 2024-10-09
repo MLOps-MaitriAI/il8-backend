@@ -27,7 +27,7 @@ jobs:
           # Add your test command here, for example:
           # python -m pytest tests/
           echo "Running tests... (Add your test command)"
-      
+
   create_pull_request:
     needs: test_and_build_backend
     runs-on: ubuntu-latest
@@ -52,7 +52,7 @@ jobs:
       
       - name: Create Pull Request
         env:
-          GITHUB_TOKEN: ${{ secrets.IL8_CI_CD }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Updated to use the correct GitHub token
         run: |
           pr_url=$(gh pr create --base production --head temp-staging-branch --title "Merge Staging to Production (Excluding .github)" --body "This PR merges the latest changes from the staging branch into the production branch, excluding the .github folder. Please review and approve to proceed with the merge.")
           echo "PR_URL=$pr_url" >> $GITHUB_ENV
@@ -77,7 +77,7 @@ jobs:
       - name: Merge Pull Request
         if: steps.approval.outputs.approved == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.IL8_CI_CD }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Use the GitHub token for merging
         run: |
           pr_number=$(echo ${{ env.PR_URL }} | awk -F'/' '{print $NF}')
           gh pr merge $pr_number --merge
