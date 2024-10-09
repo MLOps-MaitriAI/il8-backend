@@ -45,7 +45,7 @@ jobs:
           git rm -r --cached .github
           git add .
           
-          # Check if there are any changes to commit
+          # Commit only if there are changes
           if git diff-index --quiet HEAD; then
             echo "No changes to commit."
           else
@@ -54,7 +54,7 @@ jobs:
       
       - name: Create Pull Request
         env:
-          GITHUB_TOKEN: ${{ secrets.IL8_CI_CD }}
+          GH_TOKEN: ${{ secrets.IL8_CI_CD }}  # Use the correct token here
         run: |
           pr_url=$(gh pr create --base production --head temp-staging-branch --title "Merge Staging to Production (FastAPI Backend, Excluding .github)" --body "This PR merges the latest changes from the staging branch into the production branch for the FastAPI backend, excluding the .github folder. Please review and approve to proceed with the merge.")
           echo "PR_URL=$pr_url" >> $GITHUB_ENV
@@ -79,7 +79,7 @@ jobs:
       - name: Merge Pull Request
         if: steps.approval.outputs.approved == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.IL8_CI_CD }}
+          GH_TOKEN: ${{ secrets.IL8_CI_CD }}  # Set the correct token here
         run: |
           pr_number=$(echo ${{ env.PR_URL }} | awk -F'/' '{print $NF}')
           gh pr merge $pr_number --merge
